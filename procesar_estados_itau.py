@@ -31,7 +31,6 @@ def parse_importe(value):
 
     sign = -1 if s.startswith("-") else 1
     s = s.replace("-", "")
-    s = s.replace(".", "").replace(",", ".")
     try:
         return sign * float(s)
     except:
