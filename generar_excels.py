@@ -121,6 +121,9 @@ def construir_tabla(df):
 def main():
     # Leer CSV original (con el mismo formato que el que adjuntaste)
     df = pd.read_csv(INPUT_CSV, encoding="latin1")
+    # Eliminar movimientos que sean recibos de pago
+    mask_recibo = df["Nombre"].astype(str).str.contains("RECIBO DE PAGO", na=False, regex=False)
+    df = df[~mask_recibo]
 
     # Separar por moneda
     df_pesos = df[df["Moneda"] == "Pesos"].copy()
