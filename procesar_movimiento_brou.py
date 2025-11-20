@@ -11,6 +11,8 @@ import requests
 INPUT_FILE = "Detalle_Movimiento_Cuenta.xls"
 OUTPUT_FILE = "brou_detalle_movimientos.xlsx"
 
+EXCHANGE_RATE_API_KEY = "112085d534849519e2ad9806"
+
 
 # ======================
 # Helpers de formato
@@ -69,6 +71,22 @@ def parse_fecha_texto(fecha_val):
     return fecha_str
 
 
+def solicitar_cotizacion_manual():
+    """
+    Solicita al usuario que ingrese una cotización USD/UYU.
+    Devuelve None si no ingresa un valor.
+    """
+    while True:
+        valor = input("Ingrese la cotización USD/UYU a usar (Enter para cancelar): ").strip()
+        if valor == "":
+            return None
+        valor = valor.replace(",", ".")
+        try:
+            return float(valor)
+        except ValueError:
+            print("Valor inválido. Ingrese un número (ejemplo: 39.5).")
+
+
 # ======================
 # Cotización USD/UYU
 # ======================
@@ -76,27 +94,19 @@ def parse_fecha_texto(fecha_val):
 @lru_cache(maxsize=None)
 def get_usd_rate_uyu(fecha_texto):
     """
-    Devuelve la cotización 1 USD en UYU para la fecha dada (DD/MM/AAAA),
-    usando https://api.exchangerate.host/<fecha>?base=USD&symbols=UYU
+    Devuelve la cotización 1 USD en UYU usando la última tasa disponible.
+    fecha_texto se mantiene por compatibilidad.
     """
-    dt = datetime.strptime(fecha_texto, "%d/%m/%Y").date()
-    fecha_api = dt.isoformat()  # YYYY-MM-DD
-
-    url = f"https://api.exchangerate.host/{fecha_api}"
-    params = {
-        "base": "USD",
-        "symbols": "UYU",
-    }
+    url = f"https://v6.exchangerate-api.com/v6/{EXCHANGE_RATE_API_KEY}/latest/USD"
 
     try:
-        resp = requests.get(url, params=params, timeout=10)
+        resp = requests.get(url, timeout=10)
         resp.raise_for_status()
         data = resp.json()
-        rate = data["rates"]["UYU"]
-        return float(rate)
+        return float(data["conversion_rates"]["UYU"])
     except Exception as e:
         print(f"[ADVERTENCIA] No se pudo obtener cotización USD/UYU para {fecha_texto}: {e}")
-        return 0.0
+        return None
 
 
 # ======================
@@ -271,7 +281,16 @@ def main():
 
     # Agregar columna de Cotizacion
     if moneda == "DOLARES":
-        df_mov["Cotizacion"] = df_mov["Fecha"].apply(get_usd_rate_uyu)
+        cotizacion_api = get_usd_rate_uyu(df_mov["Fecha"].iloc[0])
+        if cotizacion_api is None:
+            print("La cotización automática falló. Ingrese un valor manual.")
+            cotizacion_manual = solicitar_cotizacion_manual()
+            if cotizacion_manual is None:
+                print("No se ingresó cotización manual; se usará 0.0.")
+                cotizacion_manual = 0.0
+            df_mov["Cotizacion"] = cotizacion_manual
+        else:
+            df_mov["Cotizacion"] = cotizacion_api
     else:
         df_mov["Cotizacion"] = 0.0
 

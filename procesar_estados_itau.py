@@ -14,6 +14,7 @@ INPUT_PATTERN = "Estado_De_Cuenta*.xls"
 # Archivos de salida
 OUTPUT_PESOS = "itau_debito_pesos.xlsx"
 OUTPUT_DOLARES = "itau_debito_dolares.xlsx"
+EXCHANGE_RATE_API_KEY = "112085d534849519e2ad9806"
 
 
 # ======================
@@ -55,26 +56,41 @@ def parse_fecha_texto(fecha_val):
     return fecha_str
 
 
+def solicitar_cotizacion_manual():
+    """
+    Solicita al usuario una cotización USD/UYU.
+    Devuelve None si no se ingresa un valor.
+    """
+    while True:
+        valor = input("Ingrese la cotización USD/UYU a usar (Enter para cancelar): ").strip()
+        if valor == "":
+            return None
+        valor = valor.replace(",", ".")
+        try:
+            return float(valor)
+        except ValueError:
+            print("Valor inválido. Ingrese un número (ejemplo: 39.5).")
+
+
 # ======================
 # Cotización USD/UYU
 # ======================
 
 @lru_cache(maxsize=None)
 def get_usd_rate_uyu(fecha_texto):
-    dt = datetime.strptime(fecha_texto, "%d/%m/%Y").date()
-    fecha_api = dt.isoformat()
-
-    url = f"https://api.exchangerate.host/{fecha_api}"
-    params = {"base": "USD", "symbols": "UYU"}
-
+    """
+    Obtiene la cotización USD/UYU usando la última tasa disponible.
+    fecha_texto se mantiene por compatibilidad.
+    """
+    url = f"https://v6.exchangerate-api.com/v6/{EXCHANGE_RATE_API_KEY}/latest/USD"
     try:
-        resp = requests.get(url, params=params, timeout=10)
+        resp = requests.get(url, timeout=10)
         resp.raise_for_status()
         data = resp.json()
-        return float(data["rates"]["UYU"])
+        return float(data["conversion_rates"]["UYU"])
     except Exception as e:
         print(f"[ADVERTENCIA] No se pudo obtener cotización USD/UYU para {fecha_texto}: {e}")
-        return 0.0
+        return None
 
 
 # ======================
@@ -217,7 +233,16 @@ def main():
 
     if registros_dolares:
         df_dolares = pd.concat(registros_dolares, ignore_index=True)
-        df_dolares["Cotizacion"] = df_dolares["Fecha"].apply(get_usd_rate_uyu)
+        cotizacion_api = get_usd_rate_uyu(df_dolares["Fecha"].iloc[0])
+        if cotizacion_api is None:
+            print("La cotización automática falló. Ingrese un valor manual.")
+            cotizacion_manual = solicitar_cotizacion_manual()
+            if cotizacion_manual is None:
+                print("No se ingresó cotización manual; se usará 0.0.")
+                cotizacion_manual = 0.0
+            df_dolares["Cotizacion"] = cotizacion_manual
+        else:
+            df_dolares["Cotizacion"] = cotizacion_api
         df_dolares.to_excel(OUTPUT_DOLARES, index=False)
         print(f"✅ Archivo de Dólares generado: {OUTPUT_DOLARES}")
 
