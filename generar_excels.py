@@ -55,36 +55,43 @@ def parse_fecha_texto(fecha_str):
     return fecha_str
 
 
+EXCHANGE_RATE_API_KEY = "112085d534849519e2ad9806"
+
+
 @lru_cache(maxsize=None)
 def get_usd_rate_uyu(fecha_texto):
     """
-    Obtiene la cotización USD->UYU (1 USD en Pesos Uruguayos) para la fecha dada.
-    fecha_texto: 'DD/MM/AAAA'
-
-    Usa la API pública https://api.exchangerate.host
-    Ejemplo: https://api.exchangerate.host/2025-10-06?base=USD&symbols=UYU
+    Obtiene la cotización USD->UYU (1 USD en Pesos Uruguayos) usando la
+    última tasa publicada por la API (fecha_texto se mantiene por compatibilidad).
     """
-    dt = datetime.strptime(fecha_texto, "%d/%m/%Y").date()
-    fecha_api = dt.isoformat()  # YYYY-MM-DD
-
-    url = f"https://api.exchangerate.host/{fecha_api}"
-    params = {
-        "base": "USD",
-        "symbols": "UYU",
-    }
+    url = f"https://v6.exchangerate-api.com/v6/{EXCHANGE_RATE_API_KEY}/latest/USD"
 
     try:
-        resp = requests.get(url, params=params, timeout=10)
+        resp = requests.get(url, timeout=10)
         resp.raise_for_status()
         data = resp.json()
-
-        # Estructura esperada: {"base": "USD", "date": "YYYY-MM-DD", "rates": {"UYU": valor}}
-        rate = data["rates"]["UYU"]
+        rate = data["conversion_rates"]["UYU"]
         return float(rate)
     except Exception as e:
         print(f"[ADVERTENCIA] No se pudo obtener cotización USD/UYU para {fecha_texto}: {e}")
-        # En caso de error, dejamos 0.0 para esa fila
-        return 0.0
+        # En caso de error, devolvemos None para forzar ingreso manual
+        return None
+
+
+def solicitar_cotizacion_manual():
+    """
+    Solicita al usuario una cotización USD/UYU.
+    Devuelve None si el usuario decide no ingresar un valor.
+    """
+    while True:
+        valor = input("Ingrese la cotización USD/UYU a usar (Enter para cancelar): ").strip()
+        if valor == "":
+            return None
+        valor = valor.replace(",", ".")
+        try:
+            return float(valor)
+        except ValueError:
+            print("Valor inválido. Ingrese un número (ejemplo: 39.5).")
 
 
 def construir_tabla(df):
@@ -124,7 +131,6 @@ def main():
     # Eliminar movimientos que sean recibos de pago
     mask_recibo = df["Nombre"].astype(str).str.contains("RECIBO DE PAGO", na=False, regex=False)
     df = df[~mask_recibo]
-
     # Separar por moneda
     df_pesos = df[df["Moneda"] == "Pesos"].copy()
     df_dolares = df[df["Moneda"] == "Dólares"].copy()
@@ -140,8 +146,17 @@ def main():
     # ========= Archivo de Dólares =========
     if not df_dolares.empty:
         tabla_dolares, _ = construir_tabla(df_dolares)
-        # Cotización del día según la fecha (columna 1)
-        tabla_dolares["Cotizacion"] = tabla_dolares["Fecha"].apply(get_usd_rate_uyu)
+        # Pedimos la cotización a la API una sola vez
+        cotizacion_api = get_usd_rate_uyu(tabla_dolares["Fecha"].iloc[0])
+        if cotizacion_api is None:
+            print("La cotización automática falló. Ingrese un valor manual.")
+            cotizacion_manual = solicitar_cotizacion_manual()
+            if cotizacion_manual is None:
+                print("No se ingresó cotización manual; se usará 0.0.")
+                cotizacion_manual = 0.0
+            tabla_dolares["Cotizacion"] = cotizacion_manual
+        else:
+            tabla_dolares["Cotizacion"] = cotizacion_api
         tabla_dolares.to_excel(OUTPUT_XLSX_DOLARES, index=False)
         print(f"Archivo generado: {OUTPUT_XLSX_DOLARES}")
     else:
