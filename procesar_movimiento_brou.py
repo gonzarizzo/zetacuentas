@@ -36,10 +36,6 @@ def parse_importe(value):
     sign = -1 if s.startswith("-") else 1
     s = s.replace("-", "")
 
-    # Soporta formatos con . y , mezclados
-    # Ej: "1.234,56" -> "1234.56"
-    s = s.replace(".", "").replace(",", ".")
-
     try:
         return sign * float(s)
     except ValueError:
