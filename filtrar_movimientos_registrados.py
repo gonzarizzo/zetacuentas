@@ -25,7 +25,9 @@ ACCOUNT_FILES = {
     "Crédito Itaú $": Path("movimientos_pesos.xlsx"),
     "Crédito Itaú U$S": Path("movimientos_dolares.xlsx"),
     "Débito BROU $": Path("brou_detalle_movimientos.xlsx"),
-    "Débito Itaú $ Gonza": Path("itau_debito_pesos.xlsx"),
+    "Débito Itaú $ Gonza": Path("itau_debito_pesos_gonza.xlsx"),
+    "Débito Itaú U$S Gonza": Path("itau_debito_dolares_gonza.xlsx"),
+    "Débito Itaú $ Euge": Path("itau_debito_pesos_euge.xlsx"),
 }
 
 COMPROBANTE_CANDIDATES = [Path("comprobante.xlsx"), Path("cromprobante.xlsx")]

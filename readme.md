@@ -10,7 +10,7 @@
 ## Load Itaú Débito data
 1. Download the current-month movements as Excel (bottom of the list in Itaú web).
 2. Place the files in this folder.
-3. Run `mamba run -n mi_entorno python procesar_estados_itau.py` to produce `itau_debito_pesos.xlsx` and `itau_debito_dolares.xlsx`.
+3. Run `mamba run -n mi_entorno python procesar_estados_itau.py` to produce `itau_debito_pesos_<titular>.xlsx` and `itau_debito_dolares_<titular>.xlsx`.
 
 ## Load BROU data
 1. Download the current-month movements as XLS from the “Guardar -> Archivo XLS” button (top-right of the BROU page).
@@ -24,7 +24,9 @@
 - `movimientos_pesos.xlsx` (`Crédito Itaú $`)
 - `movimientos_dolares.xlsx` (`Crédito Itaú U$S`)
 - `brou_detalle_movimientos.xlsx` (`Débito BROU $`)
-- `itau_debito_pesos.xlsx` (`Débito Itaú $ Gonza`)
+- `itau_debito_pesos_gonza.xlsx` (`Débito Itaú $ Gonza`)
+- `itau_debito_dolares_gonza.xlsx` (`Débito Itaú U$S Gonza`)
+- `itau_debito_pesos_euge.xlsx` (`Débito Itaú $ Euge`)
 
 Run it with:
 

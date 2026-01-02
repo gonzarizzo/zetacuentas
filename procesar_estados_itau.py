@@ -15,6 +15,10 @@ INPUT_PATTERN = "Estado_De_Cuenta*.xls"
 OUTPUT_PESOS = "itau_debito_pesos.xlsx"
 OUTPUT_DOLARES = "itau_debito_dolares.xlsx"
 EXCHANGE_RATE_API_KEY = "112085d534849519e2ad9806"
+OWNER_CODES = {
+    "Euge": {"1171564"},
+    "Gonza": {"1064605", "1064597"},
+}
 
 
 # ======================
@@ -53,6 +57,38 @@ def parse_fecha_texto(fecha_val):
             continue
 
     return fecha_str
+
+
+def detectar_titular_archivo(path):
+    """
+    Determina el titular (Gonza/Euge) a partir del nombre o contenido del XLS.
+    Si no se encuentra coincidencia, devuelve 'Desconocido'.
+    """
+    path_str = os.path.basename(path)
+    for owner, codes in OWNER_CODES.items():
+        if any(code in path_str for code in codes):
+            return owner
+
+    try:
+        df_raw = pd.read_excel(path, header=None, engine="xlrd", dtype=str)
+    except Exception as e:
+        print(f"[ADVERTENCIA] No se pudo leer {path} para detectar titular: {e}")
+        return "Desconocido"
+
+    for val in df_raw.fillna("").values.ravel():
+        val_str = str(val)
+        for owner, codes in OWNER_CODES.items():
+            if any(code in val_str for code in codes):
+                return owner
+
+    return "Desconocido"
+
+
+def nombre_salida_con_titular(base_name, owner):
+    """Agrega el titular al nombre del archivo de salida."""
+    name, ext = os.path.splitext(base_name)
+    owner_suffix = owner.lower().replace(" ", "_") if owner else "desconocido"
+    return f"{name}_{owner_suffix}{ext}"
 
 
 def solicitar_cotizacion_manual():
@@ -205,13 +241,14 @@ def main():
     for a in archivos:
         print(" -", a)
 
-    registros_pesos = []
-    registros_dolares = []
+    registros_por_titular = {}
 
     for path in archivos:
         print(f"\nProcesando archivo: {path}")
         moneda = detectar_moneda(path)
         print(f"  → Moneda detectada: {moneda}")
+        titular = detectar_titular_archivo(path)
+        print(f"  → Titular detectado: {titular}")
 
         df_mov = extraer_movimientos_desde_archivo(path, moneda)
 
@@ -219,31 +256,36 @@ def main():
             print("  (Sin movimientos detectados, se omite)")
             continue
 
-        if moneda == "DOLARES":
-            registros_dolares.append(df_mov)
-        else:
-            registros_pesos.append(df_mov)
+        registros_titular = registros_por_titular.setdefault(titular, {"PESOS": [], "DOLARES": []})
+        registros_titular[moneda].append(df_mov)
 
-    if registros_pesos:
-        df_pesos = pd.concat(registros_pesos, ignore_index=True)
-        df_pesos["Cotizacion"] = 0.0
-        df_pesos.to_excel(OUTPUT_PESOS, index=False)
-        print(f"\n✅ Archivo de Pesos generado: {OUTPUT_PESOS}")
+    if not registros_por_titular:
+        print("No se encontraron movimientos para ningún titular.")
+        return
 
-    if registros_dolares:
-        df_dolares = pd.concat(registros_dolares, ignore_index=True)
-        cotizacion_api = get_usd_rate_uyu(df_dolares["Fecha"].iloc[0])
-        if cotizacion_api is None:
-            print("La cotización automática falló. Ingrese un valor manual.")
-            cotizacion_manual = solicitar_cotizacion_manual()
-            if cotizacion_manual is None:
-                print("No se ingresó cotización manual; se usará 0.0.")
-                cotizacion_manual = 0.0
-            df_dolares["Cotizacion"] = cotizacion_manual
-        else:
-            df_dolares["Cotizacion"] = cotizacion_api
-        df_dolares.to_excel(OUTPUT_DOLARES, index=False)
-        print(f"✅ Archivo de Dólares generado: {OUTPUT_DOLARES}")
+    for titular, registros in registros_por_titular.items():
+        if registros["PESOS"]:
+            df_pesos = pd.concat(registros["PESOS"], ignore_index=True)
+            df_pesos["Cotizacion"] = 0.0
+            output_pesos = nombre_salida_con_titular(OUTPUT_PESOS, titular)
+            df_pesos.to_excel(output_pesos, index=False)
+            print(f"\n✅ Archivo de Pesos generado ({titular}): {output_pesos}")
+
+        if registros["DOLARES"]:
+            df_dolares = pd.concat(registros["DOLARES"], ignore_index=True)
+            cotizacion_api = get_usd_rate_uyu(df_dolares["Fecha"].iloc[0])
+            if cotizacion_api is None:
+                print("La cotización automática falló. Ingrese un valor manual.")
+                cotizacion_manual = solicitar_cotizacion_manual()
+                if cotizacion_manual is None:
+                    print("No se ingresó cotización manual; se usará 0.0.")
+                    cotizacion_manual = 0.0
+                df_dolares["Cotizacion"] = cotizacion_manual
+            else:
+                df_dolares["Cotizacion"] = cotizacion_api
+            output_dolares = nombre_salida_con_titular(OUTPUT_DOLARES, titular)
+            df_dolares.to_excel(output_dolares, index=False)
+            print(f"✅ Archivo de Dólares generado ({titular}): {output_dolares}")
 
 
 if __name__ == "__main__":
